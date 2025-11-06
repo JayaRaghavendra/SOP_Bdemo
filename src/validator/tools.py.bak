@@ -1,0 +1,111 @@
+import re
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
+
+import pandas as pd
+from dateutil import parser
+
+@dataclass
+class ToolResult:
+    passed: bool
+    info: Dict[str, Any]
+
+# Helper: parse dates robustly
+_def_date_formats = ["%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y"]
+
+def parse_date_safe(value: Any) -> Optional[pd.Timestamp]:
+    if pd.isna(value):
+        return None
+    try:
+        # Try pandas first for Excel serials/strings
+        return pd.to_datetime(value, errors="coerce")
+    except Exception:
+        pass
+    try:
+        return pd.Timestamp(parser.parse(str(value)))
+    except Exception:
+        return None
+
+# Core tools
+
+def column_exists(df: pd.DataFrame, column: str) -> ToolResult:
+    ok = column in df.columns
+    return ToolResult(passed=ok, info={"missing": [] if ok else [column]})
+
+
+def duplicates_check(df: pd.DataFrame, columns: List[str], allowed: bool = False) -> ToolResult:
+    dup = df.duplicated(subset=columns, keep=False)
+    count = int(dup.sum())
+    passed = allowed or count == 0
+    examples = df.loc[dup].head(5).to_dict(orient="records") if count else []
+    return ToolResult(passed=passed, info={"duplicate_count": count, "examples": examples})
+
+
+def value_in_master(
+    df: pd.DataFrame,
+    master: pd.DataFrame,
+    column: str,
+    master_column: str,
+) -> ToolResult:
+    missing = df[~df[column].isin(master[master_column])]
+    count = int(len(missing))
+    examples = missing.head(5).to_dict(orient="records") if count else []
+    return ToolResult(passed=count == 0, info={"missing_count": count, "examples": examples})
+
+
+def row_condition(df: pd.DataFrame, expr: str) -> ToolResult:
+    # Evaluate a boolean expression across the DataFrame; fail rows where condition is False
+    try:
+        mask = df.eval(expr)
+        failing = df[~mask]
+        count = int(len(failing))
+        examples = failing.head(5).to_dict(orient="records") if count else []
+        return ToolResult(passed=count == 0, info={"failing_count": count, "examples": examples})
+    except Exception as e:
+        return ToolResult(passed=False, info={"error": str(e)})
+
+
+def date_not_future(df: pd.DataFrame, column: str) -> ToolResult:
+    now = pd.Timestamp.now().normalize()
+    parsed = df[column].apply(parse_date_safe)
+    future_mask = parsed > now
+    future_mask = future_mask.fillna(False)
+    failing = df[future_mask]
+    count = int(len(failing))
+    examples = failing.head(5).to_dict(orient="records") if count else []
+    return ToolResult(passed=count == 0, info={"future_count": count, "examples": examples})
+
+
+def value_range(df: pd.DataFrame, column: str, min_val: Optional[float] = None, max_val: Optional[float] = None, inclusive: bool = True) -> ToolResult:
+    ser = pd.to_numeric(df[column], errors="coerce")
+    if inclusive:
+        mask = pd.Series(True, index=df.index)
+        if min_val is not None:
+            mask &= ser >= float(min_val)
+        if max_val is not None:
+            mask &= ser <= float(max_val)
+    else:
+        mask = pd.Series(True, index=df.index)
+        if min_val is not None:
+            mask &= ser > float(min_val)
+        if max_val is not None:
+            mask &= ser < float(max_val)
+    failing = df[~mask]
+    count = int(len(failing))
+    examples = failing.head(5).to_dict(orient="records") if count else []
+    return ToolResult(passed=count == 0, info={"failing_count": count, "examples": examples})
+
+
+def regex_match(df: pd.DataFrame, column: str, pattern: str, mode: str = "all") -> ToolResult:
+    # mode: all -> every row must match; any -> at least one matches
+    ser = df[column].astype(str)
+    matches = ser.str.match(pattern, na=False)
+    if mode == "all":
+        failing = df[~matches]
+        count = int(len(failing))
+        examples = failing.head(5).to_dict(orient="records") if count else []
+        return ToolResult(passed=count == 0, info={"failing_count": count, "examples": examples})
+    else:
+        passed = bool(matches.any())
+        examples = df[matches].head(5).to_dict(orient="records") if passed else []
+        return ToolResult(passed=passed, info={"examples": examples})

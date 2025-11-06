@@ -1,0 +1,10 @@
+pandas
+openpyxl
+python-dateutil
+
+streamlit
+python-dotenv
+langgraph
+langchain
+openai
+
