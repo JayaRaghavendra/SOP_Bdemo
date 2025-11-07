@@ -1,0 +1,68 @@
+Here is the UPDATED single-copy prompt including your correction:
+
+
+---
+
+FINAL PROMPT (COPY-PASTE THIS TO CODING LLM)
+
+You are an expert Python engineer.
+
+Build a complete end-to-end solution using LangGraph + Streamlit that allows a user to upload:
+
+1. An SOP “checks” file (THIS CAN BE EXCEL OR YAML — NEED TO SUPPORT BOTH)
+
+
+2. One or more input CSV/Parquet files (multiple uploads allowed)
+
+
+
+User then clicks RUN in Streamlit.
+
+Back-end should:
+
+parse checks file (if excel → read using pandas, clean columns → treat each row as a check; if YAML → parse normally)
+
+build metadata from uploaded input files automatically (columns, dtypes)
+
+build LangGraph pipeline
+
+iterate checks
+
+for each check → LLM decides tool + required file(s)
+
+triggers tools
+
+evaluate result
+
+final table → show in Streamlit
+
+
+Final UI Output Table columns:
+
+| check_id | check_title | triggered_tool(s) | status(pass/fail/blocked) | reason (1–2 lines) |
+
+STRICT REQUIREMENTS
+
+Python 3.11+
+
+MUST USE .env ONLY for keys (OPENAI_API_KEY)
+
+Must use Streamlit for UI
+
+Must use LangGraph for execution
+
+Must use a real LLM (OpenAI / LCChatOpenAI etc) with temperature=0
+
+validation tool at least:
+
+validate_rule(file_id:str, rule_expr:str) → returns violation count
+
+
+
+SOP CHECKS FILE RULES
+
+Excel format support example:
+
+columns: id, title, description, rule (rule = success criteria)
+
+I want to refine this
